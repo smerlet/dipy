@@ -199,7 +199,10 @@ def get_data(name='small_64D'):
         return pjoin(THIS_DIR, 'dsi515_b_table.txt')
     if name == 'grad514':
         return pjoin(THIS_DIR, 'grad_514.txt')
-
+    if name == '2shellstable':
+        fbvals = pjoin(THIS_DIR, '2shells-1500-2500-N64.bval')
+        fbvecs = pjoin(THIS_DIR, '2shells-1500-2500-N64.bvec')
+        return fbvals, fbvecs
 
 def dsi_voxels():
     fimg, fbvals, fbvecs = get_data('small_101D')
