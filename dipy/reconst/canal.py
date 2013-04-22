@@ -1,9 +1,9 @@
 import numpy as np
 from dipy.reconst.multi_voxel import multi_voxel_model
 from dipy.reconst.shm import real_sph_harm
-from scipy.special import genlaguerre, gamma
+from scipy.special import genlaguerre, gamma, hyp2f1
 from dipy.core.geometry import cart2sphere
-import math
+from math import factorial
 # Next step: Tester cette class
 
 
@@ -40,6 +40,9 @@ class AnalyticalFit():
 
         self.model = model
         self.data = data
+
+        def setReconstructionMatrix(self, radialOrder, zeta):
+            pass
 
     def l2estimation(self, radialOrder, zeta):
         pass
@@ -106,10 +109,40 @@ class ShoreFit(AnalyticalFit):
         self.model = model
         self.data = data
         self.gtab = model.gtab
+        self.Sshore = None
+        self.Cshore = None
+        self.M = None
 
-    def l2estimation(self, radialOrder, zeta):
-        M = SHOREmatrix(radialOrder, zeta, self.gtab)
-        print(M,M.shape)
+
+    # def setReconstructionMatrix(self,radialOrder=6, zeta=700):
+    #     print('ser rec')
+    #     self.radialOrder = radialOrder
+    #     self.zeta = zeta
+    #     self.M = SHOREmatrix(self.radialOrder,  self.zeta, self.gtab)
+    # cette matrix a besoin d'etre calculer qu'une fois (regarder l'implementation de la classe QBI)
+    # print(M.shape)
+
+    #     return self.M
+
+    def l2estimation(self,radialOrder=6, zeta=700,lambdaN=1e-8,lambdaL=1e-8):
+
+        self.radialOrder = radialOrder
+        self.zeta = zeta
+        Lshore = L_SHORE(self.radialOrder)
+        Nshore = N_SHORE(self.radialOrder)
+        if self.M == None:
+            self.M = SHOREmatrix(self.radialOrder,  self.zeta, self.gtab)
+
+        print(self.M.shape)
+        pseudoInv = np.dot(np.linalg.inv(np.dot(self.M.T, self.M) + lambdaN*Nshore + lambdaL*Lshore), self.M.T)
+
+        # Data coefficients in SHORE basis
+        self.Cshore = np.dot(pseudoInv, self.data)
+
+        # Estimated data using the SHORE basis
+        self.Sshore = np.dot(self.Cshore, self.M.T)
+
+        return self.Cshore#, self.Sshore
 
     def pdf(self):
         """ Applies the 3D FFT in the q-space grid to generate
@@ -120,7 +153,7 @@ class ShoreFit(AnalyticalFit):
 
         return Pr
 
-    def odf(self, sphere):
+    def odf(self):
         r""" Calculates the real discrete odf for a given discrete sphere
 
         ..math::
@@ -132,11 +165,30 @@ class ShoreFit(AnalyticalFit):
         where $\hat{\mathbf{u}}$ is the unit vector which corresponds to a
         sphere point.
         """
+        J = (self.radialOrder + 1) * (self.radialOrder + 2) / 2
 
-        Psi = np.zeros(sphere.shape[0])
+        Csh = np.zeros(J)
+        counter = 0;
+
+        for n in range(self.radialOrder+1):
+            for l in range(0, n+1, 2):
+                for m in range(-l, l+1):
+
+                    j = int(l + m + (2 * np.array(range(0, l, 2)) + 1).sum())
+
+                    Cnl = ((-1)**(n - l/2))/(2.0*(4.0 * np.pi**2 * self.zeta)**(3.0/2.0)) * ((2.0 * (
+                        4.0 * np.pi**2 * self.zeta)**(3.0/2.0) * factorial(n - l)) / (gamma(n + 3.0/2.0)))**(1.0/2.0)
+                    Gnl = (gamma(l/2 + 3.0/2.0) * gamma(3.0/2.0 + n)) / (gamma(
+                        l + 3.0/2.0) * factorial(n - l)) * (1.0/2.0)**(-l/2 - 3.0/2.0)
+                    Fnl = hyp2f1(-n + l, l/2 + 3.0/2.0, l + 3.0/2.0, 2.0)
+                    # float(mpmath.hyp2f1(float(a), float(b), float(c), float(z)))
+
+                    # print "(n,l,m) = (%d,%d,%d)  %f" % (n,l,m,Fnl)
+                    Csh[j] += self.Cshore[counter]*Cnl*Gnl*Fnl
+                    counter += 1
 
         # calculate the orientation distribution function
-        return Psi
+        return Csh
 
 
 def SHOREmatrix(radialOrder, zeta, gtab):
@@ -147,7 +199,6 @@ def SHOREmatrix(radialOrder, zeta, gtab):
 
     qgradients = qvals[:, None] * bvecs
     r, theta, phi = cart2sphere(qgradients[:, 0], qgradients[:, 1], qgradients[:, 2])
-
 
     M = np.zeros((r.shape[0], (radialOrder+1)*((radialOrder+1)/2)*(2*radialOrder+1)))
 
@@ -175,4 +226,36 @@ def kappa(zeta, n, l):
     if n-l < 0:
         return np.sqrt((2 * 1) / (zeta ** 1.5 * gamma(n + 1.5)))
     else:
-        return np.sqrt((2 * math.factorial(n - l)) / (zeta ** 1.5 * gamma(n + 1.5)))
+        return np.sqrt((2 * factorial(n - l)) / (zeta ** 1.5 * gamma(n + 1.5)))
+
+
+def L_SHORE(radialOrder):
+    "Returns the angular regularisation matrix for SHORE basis"
+    diagL = np.zeros((radialOrder+1)*((radialOrder+1)/2)*(2*radialOrder+1))
+    counter = 0;
+    for n in range(radialOrder+1):
+        for l in range(0, n+1, 2):
+            for m in range(-l, l+1):
+                # print(counter)
+                # print "(n,l,m) = (%d,%d,%d)" % (n,l,m)
+                # print(counter)
+                diagL[counter] = (l * (l + 1)) ** 2
+                counter += 1
+
+    return np.diag(diagL[0:counter])
+
+
+def N_SHORE(radialOrder):
+    "Returns the angular regularisation matrix for SHORE basis"
+    diagN = np.zeros((radialOrder+1)*((radialOrder+1)/2)*(2*radialOrder+1))
+    counter = 0;
+    for n in range(radialOrder+1):
+        for l in range(0, n+1, 2):
+            for m in range(-l, l+1):
+                # print(counter)
+                # print "(n,l,m) = (%d,%d,%d)" % (n,l,m)
+                # print(counter)
+                diagN[counter] = (n * (n + 1)) ** 2
+                counter += 1
+
+    return np.diag(diagN[0:counter])

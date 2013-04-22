@@ -199,10 +199,11 @@ def get_data(name='small_64D'):
         return pjoin(THIS_DIR, 'dsi515_b_table.txt')
     if name == 'grad514':
         return pjoin(THIS_DIR, 'grad_514.txt')
-    if name == '2shellstable':
+    if name == 'ISBI_testing_2shells_table':
         fbvals = pjoin(THIS_DIR, '2shells-1500-2500-N64.bval')
         fbvecs = pjoin(THIS_DIR, '2shells-1500-2500-N64.bvec')
-        return fbvals, fbvecs
+        fimg = pjoin(THIS_DIR, 'MS-SNR-30.nii.gz')
+        return fimg, fbvals, fbvecs
 
 def dsi_voxels():
     fimg, fbvals, fbvecs = get_data('small_101D')
@@ -213,6 +214,18 @@ def dsi_voxels():
     gtab = gradient_table(bvals, bvecs)
     return data, gtab
 
+
+def two_shells_voxels(xmin,xmax,ymin,ymax,zmin,zmax):
+    fimg, fbvals, fbvecs = get_data('ISBI_testing_2shells_table')
+    bvals = np.loadtxt(fbvals)
+    bvecs = np.loadtxt(fbvecs).T
+    gtab = gradient_table(bvals[1:], bvecs[1:,:])
+    img = load(fimg)
+    data = img.get_data()
+    b0 = data[:,:,:,0]
+    data = data[xmin:xmax,ymin:ymax,zmin:zmax,1:]/b0[xmin:xmax,ymin:ymax,zmin:zmax,None]
+    affine = img.get_affine()
+    return data, affine, gtab
 
 def dsi_deconv_voxels():
     gtab = gradient_table(np.loadtxt(get_data('dsi515btable')))
