@@ -1,4 +1,5 @@
 import numpy as np
+from dipy.reconst.cache import Cache
 from dipy.reconst.multi_voxel import multi_voxel_model
 from dipy.reconst.shm import real_sph_harm
 from scipy.special import genlaguerre, gamma, hyp2f1
@@ -8,7 +9,7 @@ from math import factorial
 
 
 @multi_voxel_model
-class AnalyticalModel():
+class AnalyticalModel(Cache):
 
     def __init__(self,
                  gtab):
@@ -41,8 +42,8 @@ class AnalyticalFit():
         self.model = model
         self.data = data
 
-        def setReconstructionMatrix(self, radialOrder, zeta):
-            pass
+        # def setReconstructionMatrix(self, radialOrder, zeta):
+        #     pass
 
     def l2estimation(self, radialOrder, zeta):
         pass
@@ -111,18 +112,18 @@ class ShoreFit(AnalyticalFit):
         self.gtab = model.gtab
         self.Sshore = None
         self.Cshore = None
-        self.M = None
+
 
 
     # def setReconstructionMatrix(self,radialOrder=6, zeta=700):
     #     print('ser rec')
     #     self.radialOrder = radialOrder
     #     self.zeta = zeta
-    #     self.M = SHOREmatrix(self.radialOrder,  self.zeta, self.gtab)
+    #     M = SHOREmatrix(self.radialOrder,  self.zeta, self.gtab)
     # cette matrix a besoin d'etre calculer qu'une fois (regarder l'implementation de la classe QBI)
     # print(M.shape)
 
-    #     return self.M
+    #     return M
 
     def l2estimation(self,radialOrder=6, zeta=700,lambdaN=1e-8,lambdaL=1e-8):
 
@@ -130,17 +131,21 @@ class ShoreFit(AnalyticalFit):
         self.zeta = zeta
         Lshore = L_SHORE(self.radialOrder)
         Nshore = N_SHORE(self.radialOrder)
-        if self.M == None:
-            self.M = SHOREmatrix(self.radialOrder,  self.zeta, self.gtab)
+        
 
-        print(self.M.shape)
-        pseudoInv = np.dot(np.linalg.inv(np.dot(self.M.T, self.M) + lambdaN*Nshore + lambdaL*Lshore), self.M.T)
+        M= self.model.cache_get('shore_matrix', key=self.gtab)
+        if M is None:
+			M = SHOREmatrix(self.radialOrder,  self.zeta, self.gtab)
+			self.model.cache_set('shore_matrix', self.gtab, M)
+
+
+        pseudoInv = np.dot(np.linalg.inv(np.dot(M.T, M) + lambdaN*Nshore + lambdaL*Lshore), M.T)
 
         # Data coefficients in SHORE basis
         self.Cshore = np.dot(pseudoInv, self.data)
 
         # Estimated data using the SHORE basis
-        self.Sshore = np.dot(self.Cshore, self.M.T)
+        # self.Sshore = np.dot(self.Cshore, M.T)
 
         return self.Cshore#, self.Sshore
 
