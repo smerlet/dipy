@@ -1,6 +1,6 @@
 import numpy as np
 import pylab as py
-from dipy.data import get_data, two_shells_voxels, get_sphere
+from dipy.data import get_data, two_shells_voxels, three_shells_voxels, get_sphere
 from dipy.reconst.canal import ShoreModel
 from dipy.reconst.odf import gfa, peak_directions
 from dipy.io import read_bvals_bvecs
@@ -25,7 +25,7 @@ def test_canal():
     # load icosahedron sphere
     sphere2 = create_unit_sphere(5)
     fimg, fbvals, fbvecs = get_data('ISBI_testing_2shells_table')
-    bvals, bvecs = read_bvals_bvecs(fbvals, fbvecs)  # Il faut traiter le cas ou le signal n'est pas normalise
+    bvals, bvecs = read_bvals_bvecs(fbvals, fbvecs) 
     gtab = gradient_table(bvals[1:], bvecs[1:,:])
     data, golden_directions = SticksAndBall(gtab, d=0.0015,
                                             S0=100, angles=[(0, 0), (90, 0)],
@@ -67,65 +67,21 @@ def test_canal():
 
 def test_multivox_canal():
 
-    data, affine, gtab = two_shells_voxels(10, 40, 10, 40, 25, 26)
-    # Create an ShoreModel object
+  
+    # data, affine, gtab = two_shells_voxels(10, 40, 10, 40, 25, 26)
+    data, affine, gtab = three_shells_voxels(45, 65, 35, 65, 33, 34)
+
     asm = ShoreModel(gtab)
-
-    # Fit the analytical model to the data
     asmfit = asm.fit(data)
-
-    # Estimate the SHORE coefficient using a l2 regularization
     radialOrder = 4
     zeta = 700
-    # asmfit.setReconstructionMatrix(radialOrder=radialOrder, zeta=zeta)
     Cshore = asmfit.l2estimation(radialOrder=radialOrder, zeta=zeta, lambdaN=1e-8, lambdaL=1e-8)
-    print Cshore.shape
-    # print res[0, 0, 0][0].shape, res[0, 0, 0][1].shape
 
-    # Cshore=res[:,:,:][0] ca marche pas ce truc, faut trouver le moyen d'extraire chaque premier tableau, sinon enlever Sshore qui n'est pas super important
-    # Sshore=res[:,:,:][1]
-
-    # print Cshore.shape, Sshore.shape
-
-    # for i in range(5):
-                # for j in range(5):
-
-                        # py.figure()
-                        # py.plot(res[i,j,0][1], 'r')
-                        # py.plot(data[i,j,0], 'b')
-                        # py.show()
-
-    # Save the result as a new Nifti file
-    # img = nib.Nifti1Image(Cshore.astype('f4'), affine)
-    # nib.save(img, 'Cshore.nii.gz')
-    # Save a GFA map (For the moment, it is a black map)
-    # img = nib.Nifti1Image(np.ones((5,5,3)).astype('f4'), affine)
-    # nib.save(img, 'GFAshore.nii.gz')
-    # load symmetric 724 sphere
-    sphere = get_sphere('symmetric724')
-
-    Csh = asmfit.odf()
-    print(Csh.shape)
-
-    # Save the result as a new Nifti file
-    # img = nib.Nifti1Image(Csh.astype('f4'), affine)
-    # nib.save(img, 'Csh.nii.gz')
-
-    # Set the sh_order to compute the ODF
-    sh_order = radialOrder
-
-    # Evaluate the ODF in the direction provided by 'sphere'
-    odf = sh_to_sf(Csh, sphere, sh_order, basis_type="fibernav")
-
-    # verifier l'odf maintenant
-
-    r = fvtk.ren()
-    fvtk.add(r, fvtk.sphere_funcs(odf, sphere, colormap='jet'))
-
-    fvtk.show(r)
+    assert_equal(Cshore.shape[0:3], data.shape[0:3])
+    assert_equal(np.alltrue(np.isreal(Cshore)), True)
 
 
 if __name__ == '__main__':
-    # run_module_suite()
+    run_module_suite()
     # test_multivox_canal()
-    test_canal()
+    # test_canal()

@@ -204,6 +204,12 @@ def get_data(name='small_64D'):
         fbvecs = pjoin(THIS_DIR, '2shells-1500-2500-N64.bvec')
         fimg = pjoin(THIS_DIR, 'MS-SNR-30.nii.gz')
         return fimg, fbvals, fbvecs
+    if name == '3shells_data':
+        fbvals = pjoin(THIS_DIR, '3shells-1000-2000-3500-N193.bval')
+        fbvecs = pjoin(THIS_DIR, '3shells-1000-2000-3500-N193.bvec')
+        fimg = pjoin(THIS_DIR, '3shells-1000-2000-3500-N193.nii.gz')
+        return fimg, fbvals, fbvecs
+
 
 def dsi_voxels():
     fimg, fbvals, fbvecs = get_data('small_101D')
@@ -227,17 +233,35 @@ def two_shells_voxels(xmin,xmax,ymin,ymax,zmin,zmax):
     affine = img.get_affine()
     return data, affine, gtab
 
+
+def three_shells_voxels(xmin,xmax,ymin,ymax,zmin,zmax):
+    fimg, fbvals, fbvecs = get_data('3shells_data')
+    bvals = np.loadtxt(fbvals)
+    bvecs = np.loadtxt(fbvecs).T
+    bvecs[:,0] = -bvecs[:,0]
+    bvecs[:,1] = bvecs[:,1]
+    bvecs[:,2] = bvecs[:,2]
+    gtab = gradient_table(bvals[1:], bvecs[1:,:])
+    img = load(fimg)
+    data = np.double(img.get_data())
+    b0 = np.double(data[:,:,:,0])
+    data = data[xmin:xmax,ymin:ymax,zmin:zmax,1:]/b0[xmin:xmax,ymin:ymax,zmin:zmax,None]
+    affine = img.get_affine()
+    return data, affine, gtab
+
+
 def dsi_deconv_voxels():
     gtab = gradient_table(np.loadtxt(get_data('dsi515btable')))
     data = np.zeros((2, 2, 2, 515))
     for ix in range(2):
         for iy in range(2):
             for iz in range(2):
-                data[ix,iy,iz], dirs = SticksAndBall(gtab, d=0.0015, S0=100, 
+                data[ix,iy,iz], dirs = SticksAndBall(gtab, d=0.0015, S0=100,
                                                      angles=[(0, 0), (90, 0)],
-                                                     fractions=[50, 50], 
+                                                     fractions=[50, 50],
                                                      snr=None)
     return data, gtab
+
 
 def mrtrix_spherical_functions():
     """Spherical functions represented by spherical harmonic coefficients and
@@ -262,7 +286,7 @@ def mrtrix_spherical_functions():
     func_discrete = load(pjoin(THIS_DIR, "func_discrete.nii.gz")).get_data()
     func_coef = load(pjoin(THIS_DIR, "func_coef.nii.gz")).get_data()
     gradients = np.loadtxt(pjoin(THIS_DIR, "sphere_grad.txt"))
-    # gradients[0] and the first volume of func_discrete, 
+    # gradients[0] and the first volume of func_discrete,
     # func_discrete[..., 0], are associated with the b=0 signal.
     # gradients[:, 3] are the b-values for each gradient/volume.
     sphere = Sphere(xyz=gradients[1:, :3])

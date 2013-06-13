@@ -15,7 +15,40 @@ class AnalyticalModel(Cache):
                  gtab):
         r""" Analytical and continuous modeling of the diffusion signal
 
+        The main idea is to model the diffusion signal as a linear combination of continuous
+        functions $\phi_i$,
 
+        ..math::
+            :nowrap:
+                \begin{equation}
+                    S(\mathbf{q})= \sum_{i=0}^I  c_{i} \phi_{i}(\mathbf{q}).
+                \end{equation}
+
+        where $\mathbf{q}$ is the wavector which corresponds to different gradient directions.
+        Numerous continuous functions $\phi_i$ can be used to model $S$. Some are presented in
+        [1,2,3]_.
+
+        From the $c_i$ coefficients, there exist analytical formulae to estimate the ODF.
+
+        This is an abstract class, which is used as a template for the implementation
+        of specific continuous functions classe.
+
+        Parameters
+        ----------
+        gtab : GradientTable,
+            Gradient directions and bvalues container class
+
+
+        References
+        ----------
+        .. [1] Merlet S. et. al, "Continuous diffusion signal, EAP and ODF estimation via 
+        Compressive Sensing in diffusion MRI", Medical Image Analysis, 2013.
+
+        .. [2] Rathi Y. et. al, "Sparse multi-shell diffusion imaging", MICCAI, 2011. 
+
+        .. [3] Cheng J. et. al, "Theoretical Analysis and Practical Insights on EAP 
+        Estimation via a Unified HARDI Framework", MICCAI workshop on Computational 
+        Diffusion MRI, 2011. 
         """
 
         self.bvals = gtab.bvals
@@ -29,7 +62,7 @@ class AnalyticalModel(Cache):
 class AnalyticalFit():
 
     def __init__(self, model, data):
-        """ Calculates PDF and ODF and other properties for a single voxel
+        """ Calculates diffusion properties for a single voxel. This is an abstract class.
 
         Parameters
         ----------
@@ -42,38 +75,24 @@ class AnalyticalFit():
         self.model = model
         self.data = data
 
-        # def setReconstructionMatrix(self, radialOrder, zeta):
-        #     pass
 
-    def l2estimation(self, radialOrder, zeta):
+
+    def l2estimation(self):
+        """ Least square estimation with an $\ell_2$ regularisation of the $c_i$ coefficients.
+        """
+
         pass
 
     def pdf(self):
-        """ Applies the 3D FFT in the q-space grid to generate
-        the diffusion propagator
+        """ Applies the analytical FFT on $S$ to generate the diffusion propagator.
         """
-        Pr = np.zeros(
-            self.data.shape)  # Add another set of measurement location in the R^3 where to compute the pdf (rtab for example)
-
-        return Pr
+        pass
 
     def odf(self, sphere):
-        r""" Calculates the real discrete odf for a given discrete sphere
-
-        ..math::
-            :nowrap:
-                \begin{equation}
-                    \psi_{DSI}(\hat{\mathbf{u}})=\int_{0}^{\infty}P(r\hat{\mathbf{u}})r^{2}dr
-                \end{equation}
-
-        where $\hat{\mathbf{u}}$ is the unit vector which corresponds to a
-        sphere point.
+        r""" Calculates the real analytical odf in terms of Spherical Harmonics.
         """
 
-        Psi = np.zeros(sphere.shape[0])
-
-        # calculate the orientation distribution function
-        return Psi
+        pass
 
 
 @multi_voxel_model
@@ -81,9 +100,65 @@ class ShoreModel(AnalyticalModel):
 
     def __init__(self,
                  gtab):
-        r""" Analytical and continuous modeling of the diffusion signal
+        r""" Analytical and continuous modeling of the diffusion signal with respect to the SHORE
+        basis [1,2]_.
+
+        The main idea is to model the diffusion signal as a linear combination of continuous
+        functions $\phi_i$,
+
+        ..math::
+            :nowrap:
+                \begin{equation}
+                    S(\mathbf{q})= \sum_{i=0}^I  c_{i} \phi_{i}(\mathbf{q}).
+                \end{equation}
+
+        where $\mathbf{q}$ is the wavector which corresponds to different gradient directions.
+
+        From the $c_i$ coefficients, there exists an analytical formula to estimate the ODF.
 
 
+        Parameters
+        ----------
+        gtab : GradientTable,
+            Gradient directions and bvalues container class
+
+
+        References
+        ----------
+        .. [1] Merlet S. et. al, "Continuous diffusion signal, EAP and ODF estimation via 
+        Compressive Sensing in diffusion MRI", Medical Image Analysis, 2013.
+
+
+        .. [2] Cheng J. et. al, "Theoretical Analysis and Practical Insights on EAP 
+        Estimation via a Unified HARDI Framework", MICCAI workshop on Computational 
+        Diffusion MRI, 2011. 
+        
+
+
+
+        Examples
+        --------
+        In this example where we provide the data, a gradient table
+        and a reconstruction sphere, we model the diffusion signal with respect
+        to the SHORE basis and compute the real and analytical ODF in terms of 
+        Spherical Harmonics.
+
+        from dipy.data import get_data,get_sphere
+        sphere = get_sphere('symmetric724')
+        fimg, fbvals, fbvecs = get_data('ISBI_testing_2shells_table')
+        bvals, bvecs = read_bvals_bvecs(fbvals, fbvecs) 
+        gtab = gradient_table(bvals[1:], bvecs[1:,:])
+        from dipy.sims.voxel import SticksAndBall
+        data, golden_directions = SticksAndBall(gtab, d=0.0015,
+                                                S0=1, angles=[(0, 0), (90, 0)],
+                                                fractions=[50, 50], snr=None)
+        from dipy.reconst.canal import ShoreModel
+        asm = ShoreModel(gtab)
+        asmfit = asm.fit(data)
+        radialOrder = 4
+        zeta = 700
+        Cshore, Sshore = asmfit.l2estimation(radialOrder=radialOrder, zeta=zeta, lambdaN=1e-8, lambdaL=1e-8)
+        Csh = asmfit.odf()
         """
 
         self.bvals = gtab.bvals
@@ -97,7 +172,7 @@ class ShoreModel(AnalyticalModel):
 class ShoreFit(AnalyticalFit):
 
     def __init__(self, model, data):
-        """ Calculates PDF and ODF and other properties for a single voxel
+        """ Calculates diffusion properties for a single voxel
 
         Parameters
         ----------
@@ -110,68 +185,66 @@ class ShoreFit(AnalyticalFit):
         self.model = model
         self.data = data
         self.gtab = model.gtab
-        self.Sshore = None
         self.Cshore = None
 
 
 
-    # def setReconstructionMatrix(self,radialOrder=6, zeta=700):
-    #     print('ser rec')
-    #     self.radialOrder = radialOrder
-    #     self.zeta = zeta
-    #     M = SHOREmatrix(self.radialOrder,  self.zeta, self.gtab)
-    # cette matrix a besoin d'etre calculer qu'une fois (regarder l'implementation de la classe QBI)
-    # print(M.shape)
-
-    #     return M
 
     def l2estimation(self,radialOrder=6, zeta=700,lambdaN=1e-8,lambdaL=1e-8):
+        """ Least square estimation with an $\ell_2$ regularisation of the $c_i$ coefficients.
+
+        Parameters
+        ----------
+        radialOrder : unsigned int,
+            Radial Order
+        zeta : unsigned int,
+            scale factor
+        lambdaN : float,
+            radial regularisation constant
+        lambdaL : float,
+            angular regularisation constant
+        """
 
         self.radialOrder = radialOrder
         self.zeta = zeta
         Lshore = L_SHORE(self.radialOrder)
         Nshore = N_SHORE(self.radialOrder)
         
-
+        #Generate the SHORE basis
         M= self.model.cache_get('shore_matrix', key=self.gtab)
         if M is None:
 			M = SHOREmatrix(self.radialOrder,  self.zeta, self.gtab)
 			self.model.cache_set('shore_matrix', self.gtab, M)
 
 
-        pseudoInv = np.dot(np.linalg.inv(np.dot(M.T, M) + lambdaN*Nshore + lambdaL*Lshore), M.T)
+        
 
-        # Data coefficients in SHORE basis
+        # Compute the signal coefficients in SHORE basis
+        pseudoInv = np.dot(np.linalg.inv(np.dot(M.T, M) + lambdaN*Nshore + lambdaL*Lshore), M.T)
         self.Cshore = np.dot(pseudoInv, self.data)
 
-        # Estimated data using the SHORE basis
-        # self.Sshore = np.dot(self.Cshore, M.T)
 
         return self.Cshore#, self.Sshore
 
     def pdf(self):
-        """ Applies the 3D FFT in the q-space grid to generate
-        the diffusion propagator
+        """ Applies the analytical FFT on $S$ to generate the diffusion propagator.
+        To be implemented.
         """
+
         Pr = np.zeros(
             self.data.shape)  # Add another set of measurement location in the R^3 where to compute the pdf (rtab for example)
 
         return Pr
 
     def odf(self):
-        r""" Calculates the real discrete odf for a given discrete sphere
-
-        ..math::
-            :nowrap:
-                \begin{equation}
-                    \psi_{DSI}(\hat{\mathbf{u}})=\int_{0}^{\infty}P(r\hat{\mathbf{u}})r^{2}dr
-                \end{equation}
-
-        where $\hat{\mathbf{u}}$ is the unit vector which corresponds to a
-        sphere point.
+        r""" Calculates the real analytical odf in terms of Spherical Harmonics.
         """
+
+        #Number of Spherical Harmonics involved in the estimation
         J = (self.radialOrder + 1) * (self.radialOrder + 2) / 2
 
+
+        #Compute the spherical Harmonic Coefficients
         Csh = np.zeros(J)
         counter = 0;
 
@@ -186,18 +259,26 @@ class ShoreFit(AnalyticalFit):
                     Gnl = (gamma(l/2 + 3.0/2.0) * gamma(3.0/2.0 + n)) / (gamma(
                         l + 3.0/2.0) * factorial(n - l)) * (1.0/2.0)**(-l/2 - 3.0/2.0)
                     Fnl = hyp2f1(-n + l, l/2 + 3.0/2.0, l + 3.0/2.0, 2.0)
-                    # float(mpmath.hyp2f1(float(a), float(b), float(c), float(z)))
 
-                    # print "(n,l,m) = (%d,%d,%d)  %f" % (n,l,m,Fnl)
                     Csh[j] += self.Cshore[counter]*Cnl*Gnl*Fnl
                     counter += 1
 
-        # calculate the orientation distribution function
+        
         return Csh
 
 
 def SHOREmatrix(radialOrder, zeta, gtab):
-    "Compute the SHORE matrix"
+    """Compute the SHORE matrix"
+
+    Parameters
+    ----------
+    radialOrder : unsigned int,
+        Radial Order
+    zeta : unsigned int,
+        scale factor
+    gtab : GradientTable,
+        Gradient directions and bvalues container class
+    """
 
     qvals = np.sqrt(gtab.bvals)
     bvecs = gtab.bvecs
@@ -207,27 +288,23 @@ def SHOREmatrix(radialOrder, zeta, gtab):
 
     M = np.zeros((r.shape[0], (radialOrder+1)*((radialOrder+1)/2)*(2*radialOrder+1)))
 
-    # calculer le r theta phi et compare avec mon code python pour savoir si c'est correct
     counter = 0
     for n in range(radialOrder+1):
         for l in range(0, n+1, 2):
             for m in range(-l, l+1):
-                # print(counter)
-                # print "(n,l,m) = (%d,%d,%d)" % (n,l,m)
-                # print(counter)
+
                 M[:, counter] = \
                     real_sph_harm(m, n, theta, phi) * \
                     genlaguerre(n - l, l + 0.5)(r ** 2 / zeta) * \
                     np.exp(- r ** 2 / (2 * zeta)) * \
-                    kappa(zeta, n, l) * \
+                    __kappa(zeta, n, l) * \
                     (r ** 2 / zeta)**(l/2)
 
-                # print(sum(genlaguerre(n - l/2,l + 0.5)(r ** 2 / zeta)))
                 counter += 1
     return M[:, 0:counter]
 
 
-def kappa(zeta, n, l):
+def __kappa(zeta, n, l):
     if n-l < 0:
         return np.sqrt((2 * 1) / (zeta ** 1.5 * gamma(n + 1.5)))
     else:
